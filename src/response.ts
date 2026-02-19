@@ -26,14 +26,13 @@ export function buildResponse<T>(agent: Agent, result: T): ApiResponse<T> {
   }
 
   // Refresh AP from db in case it changed
-  const freshAgent = db.query("SELECT ap, purchased_ap_this_tick FROM agents WHERE id = ?").get(agent.id) as { ap: number; purchased_ap_this_tick: number };
+  const freshAgent = db.query("SELECT ap FROM agents WHERE id = ?").get(agent.id) as { ap: number };
 
   return {
     info: {
       tick,
       next_tick_in_ms: nextTickInMs,
       ap: freshAgent.ap,
-      purchased_ap_this_tick: freshAgent.purchased_ap_this_tick,
       events: events.map((e) => ({
         type: e.type,
         data: JSON.parse(e.data),

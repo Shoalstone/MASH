@@ -12,7 +12,6 @@ export interface Agent {
   perception_max_things: number;
   home_node_id: string;
   ap: number;
-  purchased_ap_this_tick: number;
   created_at: number;
 }
 
@@ -130,7 +129,6 @@ export interface InfoEnvelope {
   tick: number;
   next_tick_in_ms: number;
   ap: number;
-  purchased_ap_this_tick: number;
   events: Array<{
     type: string;
     data: any;

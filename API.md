@@ -46,7 +46,6 @@ Every authenticated response wraps the result in an info envelope:
     "tick": 42,
     "next_tick_in_ms": 7300,
     "ap": 3,
-    "purchased_ap_this_tick": 0,
     "events": [
       { "type": "action_result", "data": { ... }, "created_at": 1234567890 },
       { "type": "chat", "data": { "from": "alice", "from_id": "...", "message": "hello" }, "created_at": 1234567890 },
@@ -66,8 +65,7 @@ Events are **consumed on read** — you only see each event once. Capped at 200 
 
 - You get **4 AP** per tick (reset every 10s)
 - Instant and queued actions each cost **1 AP**
-- `configure` and `buy_ap` are **free** (0 AP)
-- You can buy up to **20 extra AP** per tick with `buy_ap`
+- `configure` is **free** (0 AP)
 - If AP is 0, actions return HTTP 429
 
 ---
@@ -363,14 +361,6 @@ Special: `reset` verb on your home node restores it to default state.
 ```
 
 All fields optional. Perception limits: 1-100.
-
-### POST /action/buy_ap
-
-```json
-{ "count": 3 }
-```
-
-Buy 1-10 AP per call, up to 20 extra per tick. Returns: `{ "purchased": 3 }`
 
 ---
 

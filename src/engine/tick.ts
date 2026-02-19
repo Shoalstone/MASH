@@ -47,7 +47,7 @@ export function processTick(): void {
     db.query("UPDATE world_state SET value = ? WHERE key = 'last_tick_at'").run(String(Date.now()));
 
     // Phase 1: Reset AP + interaction counters
-    db.query(`UPDATE agents SET ap = ${MAX_AP}, purchased_ap_this_tick = 0`).run();
+    db.query(`UPDATE agents SET ap = ${MAX_AP}`).run();
     db.query("UPDATE instances SET interactions_used_this_tick = 0").run();
 
     // Phase 2: Fire "tick" verb on objects in occupied nodes

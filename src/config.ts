@@ -6,6 +6,5 @@ export const MAX_EVENTS_PER_RESPONSE = 200;
 export const EVENT_DELIVERED_TTL_MS = 10 * 60 * 1000; // 10 minutes
 export const EVENT_UNDELIVERED_TTL_MS = 60 * 60 * 1000; // 1 hour
 export const LINK_INDEX_LIMIT = 20;
-export const MAX_BUY_AP_PER_TICK = 20;
 export const DATABASE_PATH = process.env.DATABASE_PATH || "./mash.db";
 export const PORT = Number(process.env.PORT) || 3000;

@@ -4,14 +4,14 @@ import type { Agent } from "./types.ts";
 import { buildResponse, getTickInfo } from "./response.ts";
 import { handleLook, handleSurvey, handleInspect, handleSay, handleList } from "./instant.ts";
 import { enqueueAction } from "./queued.ts";
-import { MAX_AP, MAX_BUY_AP_PER_TICK } from "./config.ts";
+import { MAX_AP } from "./config.ts";
 import { checkHomeNodeAccess } from "./engine/permissions.ts";
 
 const actions = new Hono<{ Variables: { agent: Agent } }>();
 
 const INSTANT_ACTIONS = new Set(["look", "survey", "inspect", "say", "list"]);
 const QUEUED_ACTIONS = new Set(["create", "edit", "delete", "travel", "home", "take", "drop"]);
-const FREE_ACTIONS = new Set(["configure", "buy_ap"]);
+const FREE_ACTIONS = new Set(["configure"]);
 
 actions.post("/:verb", async (c) => {
   const agent = c.get("agent");
@@ -28,10 +28,6 @@ actions.post("/:verb", async (c) => {
   if (verb === "configure") {
     return c.json(buildResponse(agent, handleConfigure(agent, body)));
   }
-  if (verb === "buy_ap") {
-    return c.json(buildResponse(agent, handleBuyAp(agent, body)));
-  }
-
   // Check AP
   const freshAgent = db.query("SELECT * FROM agents WHERE id = ?").get(agent.id) as Agent;
 
@@ -139,20 +135,6 @@ function handleConfigure(agent: Agent, params: any): any {
   db.query(`UPDATE agents SET ${updates.join(", ")} WHERE id = ?`).run(...values);
 
   return { configured: true };
-}
-
-function handleBuyAp(agent: Agent, params: any): any {
-  const count = Math.max(1, Math.min(10, Number(params.count) || 1));
-  const freshAgent = db.query("SELECT * FROM agents WHERE id = ?").get(agent.id) as Agent;
-
-  if (freshAgent.purchased_ap_this_tick + count > MAX_BUY_AP_PER_TICK) {
-    return { error: `can buy at most ${MAX_BUY_AP_PER_TICK} AP per tick` };
-  }
-
-  db.query("UPDATE agents SET ap = ap + ?, purchased_ap_this_tick = purchased_ap_this_tick + ? WHERE id = ?")
-    .run(count, count, agent.id);
-
-  return { purchased: count };
 }
 
 export default actions;

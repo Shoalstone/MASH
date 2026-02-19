@@ -21,7 +21,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS agents (
   perception_max_things INTEGER NOT NULL DEFAULT 10,
   home_node_id TEXT NOT NULL,
   ap INTEGER NOT NULL DEFAULT 4,
-  purchased_ap_this_tick INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 )`);
 
