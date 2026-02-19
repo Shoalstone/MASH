@@ -1,7 +1,8 @@
 import { nanoid } from "nanoid";
 import db from "./db.ts";
 import { LINK_INDEX_LIMIT } from "./config.ts";
-import type { Instance, LinkUsage } from "./types.ts";
+import type { Instance, LinkUsage, Agent } from "./types.ts";
+import { getInstancePermission, evaluateRule } from "./engine/permissions.ts";
 
 export function createHomeNode(agentId: string, username: string): string {
   const now = Date.now();
@@ -45,13 +46,27 @@ export function createHomeNode(agentId: string, username: string): string {
   return homeNodeId;
 }
 
-export function getRandomDestination(excludeNodeId: string): string | null {
-  const node = db.query(`
-    SELECT id FROM instances
-    WHERE type = 'node' AND is_void = 0 AND is_destroyed = 0 AND id != ?
-    ORDER BY RANDOM() LIMIT 1
-  `).get(excludeNodeId) as { id: string } | null;
-  return node?.id ?? null;
+export function getRandomDestination(excludeNodeId: string, agent: Agent): string | null {
+  // Exclude current node, home nodes (any agent's home), void, and destroyed
+  const candidates = db.query(`
+    SELECT * FROM instances
+    WHERE type = 'node'
+      AND is_void = 0
+      AND is_destroyed = 0
+      AND id != ?
+      AND id NOT IN (SELECT home_node_id FROM agents WHERE home_node_id IS NOT NULL)
+    ORDER BY RANDOM()
+  `).all(excludeNodeId) as Instance[];
+
+  // Filter by entry permission (interact rule on each candidate node)
+  for (const node of candidates) {
+    const interactRule = getInstancePermission(node, "interact");
+    if (evaluateRule(interactRule, agent, node)) {
+      return node.id;
+    }
+  }
+
+  return null;
 }
 
 export function getLinkIndex(agentId: string): LinkUsage[] {

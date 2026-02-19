@@ -266,7 +266,7 @@ export function processTravel(agent: ActiveAgent, params: any): any {
     // Determine destination
     let destinationId: string | null;
     if (link.system_type === "random_link") {
-      destinationId = getRandomDestination(currentNodeId);
+      destinationId = getRandomDestination(currentNodeId, agent);
       if (!destinationId) {
         refundAp(agent, linkIds.length - i);
         return { error: "no available destinations" };
