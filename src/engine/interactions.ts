@@ -271,11 +271,15 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     const [, templateId, fromRef] = effect;
     const fromId = resolveRef(fromRef, ctx);
     if (!fromId) return;
-    if (!checkEffectPermission(ctx, fromId, "contain")) return;
 
+    // Determine if the source is an agent (actor) or an instance
+    const isAgent = ctx.actor && fromId === ctx.actor.id;
+    if (!isAgent && !checkEffectPermission(ctx, fromId, "contain")) return;
+
+    const containerType = isAgent ? "agent" : "instance";
     const thing = db.query(
-      "SELECT * FROM instances WHERE template_id = ? AND container_type = 'instance' AND container_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
-    ).get(templateId, fromId) as Instance | null;
+      "SELECT * FROM instances WHERE template_id = ? AND container_type = ? AND container_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
+    ).get(templateId, containerType, fromId) as Instance | null;
     if (!thing) return;
 
     db.query("UPDATE instances SET container_type = 'instance', container_id = ? WHERE id = ?").run(ctx.self.id, thing.id);
