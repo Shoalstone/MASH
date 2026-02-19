@@ -291,14 +291,18 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     const [, templateId, toRef] = effect;
     const toId = resolveRef(toRef, ctx);
     if (!toId) return;
-    if (!checkEffectPermission(ctx, toId, "contain")) return;
+
+    // Determine if the destination is an agent (actor) or an instance
+    const isAgent = ctx.actor && toId === ctx.actor.id;
+    if (!isAgent && !checkEffectPermission(ctx, toId, "contain")) return;
 
     const thing = db.query(
       "SELECT * FROM instances WHERE template_id = ? AND container_type = 'instance' AND container_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
     ).get(templateId, ctx.self.id) as Instance | null;
     if (!thing) return;
 
-    db.query("UPDATE instances SET container_type = 'instance', container_id = ? WHERE id = ?").run(toId, thing.id);
+    const containerType = isAgent ? "agent" : "instance";
+    db.query("UPDATE instances SET container_type = ?, container_id = ? WHERE id = ?").run(containerType, toId, thing.id);
     return;
   }
 
@@ -308,8 +312,9 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     const targetId = resolveRef(ref, ctx);
     if (!targetId) return;
 
-    // If moving self, always allowed; otherwise check permission
-    if (targetId !== ctx.self.id && !checkEffectPermission(ctx, targetId, "contain")) return;
+    // If moving self or the actor, always allowed; otherwise check permission
+    const isAgent = ctx.actor && targetId === ctx.actor.id;
+    if (targetId !== ctx.self.id && !isAgent && !checkEffectPermission(ctx, targetId, "contain")) return;
 
     // Check if target is an agent
     const agent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(targetId) as Agent | null;
@@ -339,11 +344,15 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     const template = db.query("SELECT * FROM templates WHERE id = ?").get(templateId) as Template | null;
     if (!template) return;
 
+    // Determine if the target container is an agent or an instance
+    const isAgent = ctx.actor && containerId === ctx.actor.id;
+    const containerType = isAgent ? "agent" : "instance";
+
     const id = nanoid();
     db.query(`
       INSERT INTO instances (id, template_id, type, short_description, long_description, fields, permissions, container_type, container_id, is_void, is_destroyed, system_type, interactions_used_this_tick, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, '{}', 'instance', ?, 0, 0, NULL, 0, ?)
-    `).run(id, template.id, template.type, template.short_description, template.long_description, template.fields, containerId, Date.now());
+      VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, 0, 0, NULL, 0, ?)
+    `).run(id, template.id, template.type, template.short_description, template.long_description, template.fields, containerType, containerId, Date.now());
     return;
   }
 
