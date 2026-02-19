@@ -307,7 +307,7 @@ Field changes merge with existing fields. Permission changes require `perms` per
 - Multi-hop travel (`via` as array) works identically to sequential single hops
 - If denied mid-route, you stop at the last successful position and unused AP is refunded
 
-Result event: `{ "arrived_at": "...", "perception": { node, agents, links, things } }`
+Result event: `{ "arrived_at": "...", "perception": { node, agents, links, things } }` — other agents at the origin/destination see departure/arrival broadcasts, but you receive the perception instead
 
 ### POST /action/home
 
