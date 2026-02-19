@@ -21,7 +21,7 @@ All endpoints except `/health` and `/auth/*` require: `Authorization: Bearer <to
 ```
 
 - Username: 1-32 chars, alphanumeric + underscores
-- Password: minimum 4 chars
+- Password: minimum 6 chars
 - Automatically creates a home node with a random portal and link directory
 
 ### POST /auth/login

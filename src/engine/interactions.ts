@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import db from "../db.ts";
+import db, { AGENT_COLUMNS } from "../db.ts";
 import { MAX_INTERACTIONS_PER_TICK } from "../config.ts";
 import type { Agent, Instance, Template, Interaction, Condition, Effect, EffectEntry, ConditionalBlock, Permissions, PermissionKey } from "../types.ts";
 import { checkPermission } from "./permissions.ts";
@@ -308,7 +308,7 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     if (targetId !== ctx.self.id && !checkEffectPermission(ctx, targetId, "contain")) return;
 
     // Check if target is an agent
-    const agent = db.query("SELECT * FROM agents WHERE id = ?").get(targetId) as Agent | null;
+    const agent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(targetId) as Agent | null;
     if (agent) {
       const destNode = db.query("SELECT * FROM instances WHERE id = ? AND type = 'node' AND is_void = 0 AND is_destroyed = 0").get(nodeId) as Instance | null;
       if (destNode) {
@@ -368,7 +368,7 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
       if (!checkEffectPermission(ctx, targetId, "perms")) return;
 
       // Escalation check: owner must have the permission they're granting
-      const owner = db.query("SELECT * FROM agents WHERE id = ?").get(ctx.template.owner_id) as Agent | null;
+      const owner = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(ctx.template.owner_id) as Agent | null;
       if (owner && !checkPermission(owner, target, permKey as PermissionKey)) return;
     }
 
@@ -452,7 +452,7 @@ function checkEffectPermission(ctx: InteractionContext, targetId: string, permKe
   if (targetId === ctx.self.id) return true;
 
   // Otherwise use template owner's permissions
-  const owner = db.query("SELECT * FROM agents WHERE id = ?").get(ctx.template.owner_id) as Agent | null;
+  const owner = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(ctx.template.owner_id) as Agent | null;
   if (!owner) return false;
 
   const target = db.query("SELECT * FROM instances WHERE id = ?").get(targetId) as Instance | null;

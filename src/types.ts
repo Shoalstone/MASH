@@ -1,7 +1,6 @@
 export interface Agent {
   id: string;
   username: string;
-  password_hash: string;
   token: string | null;
   current_node_id: string;
   short_description: string;
@@ -13,6 +12,10 @@ export interface Agent {
   home_node_id: string;
   ap: number;
   created_at: number;
+}
+
+export interface AgentWithHash extends Agent {
+  password_hash: string;
 }
 
 export type InstanceType = "node" | "link" | "thing";

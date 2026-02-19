@@ -85,6 +85,15 @@ export function canEscalatePermission(
   return checkPermission(ownerAgent, targetInstance, permKey);
 }
 
+export function isInAgentInventory(instance: Instance, agentId: string): boolean {
+  if (instance.container_type === "agent" && instance.container_id === agentId) return true;
+  if (instance.container_type === "instance" && instance.container_id) {
+    const parent = db.query("SELECT * FROM instances WHERE id = ?").get(instance.container_id) as Instance | null;
+    if (parent) return isInAgentInventory(parent, agentId);
+  }
+  return false;
+}
+
 export function checkHomeNodeAccess(agent: Agent, nodeId: string): boolean {
   const node = db.query("SELECT * FROM instances WHERE id = ? AND type = 'node'").get(nodeId) as Instance | null;
   if (!node) return true; // node doesn't exist, let action fail elsewhere

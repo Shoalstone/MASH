@@ -101,4 +101,6 @@ if (!existing) {
   db.exec(`INSERT INTO world_state (key, value) VALUES ('last_tick_at', '${Date.now()}')`);
 }
 
+export const AGENT_COLUMNS = "id, username, token, current_node_id, short_description, long_description, see_broadcasts, perception_max_agents, perception_max_links, perception_max_things, home_node_id, ap, created_at";
+
 export default db;

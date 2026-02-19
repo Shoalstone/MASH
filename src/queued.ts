@@ -1,8 +1,8 @@
 import { nanoid } from "nanoid";
-import db from "./db.ts";
+import db, { AGENT_COLUMNS } from "./db.ts";
 import { MAX_CONTAINMENT_DEPTH } from "./config.ts";
 import type { Agent, Instance, Template, Permissions, PermissionKey } from "./types.ts";
-import { checkPermission, getTemplateOwner, checkContainmentDepth, getContainingNode } from "./engine/permissions.ts";
+import { checkPermission, getTemplateOwner, checkContainmentDepth, getContainingNode, isInAgentInventory } from "./engine/permissions.ts";
 import { addEvent, broadcastToNode } from "./response.ts";
 import { getRandomDestination, recordLinkUsage, resetHomeNode } from "./home.ts";
 import { fireInteractions } from "./engine/interactions.ts";
@@ -218,7 +218,7 @@ function handleVoidCascade(instance: Instance): void {
   // Move agents in void/destroyed nodes to their homes
   if (instance.type === "node") {
     const agents = db.query(
-      "SELECT * FROM agents WHERE current_node_id = ?"
+      `SELECT ${AGENT_COLUMNS} FROM agents WHERE current_node_id = ?`
     ).all(instance.id) as Agent[];
 
     for (const a of agents) {
@@ -446,15 +446,6 @@ export function processDrop(agent: Agent, params: any): any {
   }, agent.id);
 
   return { dropped: true, thing_id: target_id };
-}
-
-function isInAgentInventory(instance: Instance, agentId: string): boolean {
-  if (instance.container_type === "agent" && instance.container_id === agentId) return true;
-  if (instance.container_type === "instance" && instance.container_id) {
-    const parent = db.query("SELECT * FROM instances WHERE id = ?").get(instance.container_id) as Instance | null;
-    if (parent) return isInAgentInventory(parent, agentId);
-  }
-  return false;
 }
 
 export function processCustomVerb(agent: Agent, verb: string, params: any): any {

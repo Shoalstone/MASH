@@ -101,5 +101,11 @@ startTickLoop();
 console.log(`[mash] Starting on port ${PORT}`);
 export default {
   port: PORT,
-  fetch: app.fetch,
+  fetch(req: Request, server: any) {
+    const ip = server.requestIP(req);
+    if (ip) {
+      req.headers.set("X-Real-IP", ip.address);
+    }
+    return app.fetch(req, server);
+  },
 };

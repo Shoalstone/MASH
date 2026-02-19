@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import db from "./db.ts";
+import db, { AGENT_COLUMNS } from "./db.ts";
 import type { Agent } from "./types.ts";
 import { buildResponse, getTickInfo } from "./response.ts";
 import { handleLook, handleSurvey, handleInspect, handleSay, handleList } from "./instant.ts";
@@ -29,7 +29,7 @@ actions.post("/:verb", async (c) => {
     return c.json(buildResponse(agent, handleConfigure(agent, body)));
   }
   // Check AP
-  const freshAgent = db.query("SELECT * FROM agents WHERE id = ?").get(agent.id) as Agent;
+  const freshAgent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(agent.id) as Agent;
 
   // Travel costs 1 AP per hop
   const apCost = verb === "travel" && Array.isArray(body.via) ? body.via.length : 1;
@@ -76,7 +76,7 @@ actions.post("/:verb", async (c) => {
   if (QUEUED_ACTIONS.has(verb)) {
     const { tick } = getTickInfo();
     const { action_id } = enqueueAction(agent.id, verb, body, tick + 1);
-    const updatedAgent = db.query("SELECT * FROM agents WHERE id = ?").get(agent.id) as Agent;
+    const updatedAgent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(agent.id) as Agent;
     return c.json(buildResponse(updatedAgent, {
       queued: true,
       action_id,
@@ -88,7 +88,7 @@ actions.post("/:verb", async (c) => {
   // Custom verb — also queued
   const { tick } = getTickInfo();
   const { action_id } = enqueueAction(agent.id, verb, body, tick + 1);
-  const updatedAgent = db.query("SELECT * FROM agents WHERE id = ?").get(agent.id) as Agent;
+  const updatedAgent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(agent.id) as Agent;
   return c.json(buildResponse(updatedAgent, {
     queued: true,
     action_id,

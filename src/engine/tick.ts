@@ -1,4 +1,4 @@
-import db from "../db.ts";
+import db, { AGENT_COLUMNS } from "../db.ts";
 import { TICK_INTERVAL_MS, MAX_AP, EVENT_DELIVERED_TTL_MS, EVENT_UNDELIVERED_TTL_MS } from "../config.ts";
 import type { Agent, ActionQueueEntry, Instance } from "../types.ts";
 import { addEvent } from "../response.ts";
@@ -75,7 +75,7 @@ export function processTick(): void {
     ).all(tickNumber) as ActionQueueEntry[];
 
     for (const action of actions) {
-      const agent = db.query("SELECT * FROM agents WHERE id = ?").get(action.agent_id) as Agent | null;
+      const agent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(action.agent_id) as Agent | null;
       if (!agent) {
         db.query("DELETE FROM action_queue WHERE id = ?").run(action.id);
         continue;
@@ -113,7 +113,8 @@ export function processTick(): void {
             break;
         }
       } catch (err: any) {
-        result = { error: err.message || "internal error" };
+        console.error(`[tick] Error processing action ${action.action} for agent ${action.agent_id}:`, err);
+        result = { error: "action failed" };
       }
 
       // Store result as event for the agent

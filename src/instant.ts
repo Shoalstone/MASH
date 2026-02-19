@@ -1,6 +1,6 @@
-import db from "./db.ts";
+import db, { AGENT_COLUMNS } from "./db.ts";
 import type { Agent, Instance, Template } from "./types.ts";
-import { checkPermission, getTemplateOwner } from "./engine/permissions.ts";
+import { checkPermission, getTemplateOwner, getContainingNode, isInAgentInventory } from "./engine/permissions.ts";
 import { getLinkIndex } from "./home.ts";
 import { broadcastToNode } from "./response.ts";
 
@@ -12,7 +12,7 @@ export function handleLook(agent: Agent, params: any): any {
   }
 
   // Look at a specific agent
-  const targetAgent = db.query("SELECT * FROM agents WHERE id = ?").get(targetId) as Agent | null;
+  const targetAgent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(targetId) as Agent | null;
   if (targetAgent && targetAgent.current_node_id === agent.current_node_id) {
     return {
       type: "agent",
@@ -27,6 +27,20 @@ export function handleLook(agent: Agent, params: any): any {
   const instance = db.query("SELECT * FROM instances WHERE id = ?").get(targetId) as Instance | null;
   if (!instance || instance.is_void || instance.is_destroyed) {
     return { error: "target not found or is void" };
+  }
+
+  // Node-scoped access check: agent must be able to see the instance
+  if (instance.system_type !== "link_index") {
+    if (instance.type === "node") {
+      if (instance.id !== agent.current_node_id) {
+        return { error: "target not found or is void" };
+      }
+    } else {
+      const containingNode = getContainingNode(instance);
+      if (containingNode !== agent.current_node_id && !isInAgentInventory(instance, agent.id)) {
+        return { error: "target not found or is void" };
+      }
+    }
   }
 
   // System: link_index shows recent links
