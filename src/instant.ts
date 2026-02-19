@@ -14,12 +14,21 @@ export function handleLook(agent: ActiveAgent, params: any): any {
   // Look at a specific agent
   const targetAgent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(targetId) as Agent | null;
   if (targetAgent && targetAgent.current_node_id === agent.current_node_id) {
+    const carried = db.query(
+      "SELECT * FROM instances WHERE container_type = 'agent' AND container_id = ? AND is_void = 0 AND is_destroyed = 0"
+    ).all(targetAgent.id) as Instance[];
+    const visibleThings = carried
+      .filter((item) => checkPermission(agent, item, "inspect"))
+      .slice(0, agent.perception_max_things)
+      .map((item) => ({ id: item.id, short_description: item.short_description }));
+
     return {
       type: "agent",
       id: targetAgent.id,
       username: targetAgent.username,
       short_description: targetAgent.short_description,
       long_description: targetAgent.long_description,
+      things: visibleThings,
     };
   }
 

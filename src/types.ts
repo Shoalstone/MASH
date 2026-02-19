@@ -109,7 +109,7 @@ export type Condition =
 
 export type Effect =
   | ["set", string, any]
-  | ["add", string, number]
+  | ["add", string, number | string]
   | ["say", string]
   | ["take", string, string]
   | ["give", string, string]

@@ -74,6 +74,7 @@ function resolveRef(ref: string, ctx: InteractionContext): any {
   if (root === "self") return resolveSelfRef(parts.slice(1), ctx);
   if (root === "actor") return resolveActorRef(parts.slice(1), ctx);
   if (root === "subject") return resolveSubjectRef(parts.slice(1), ctx);
+  if (root === "carrier") return resolveCarrierRef(parts.slice(1), ctx);
   if (root === "container") return resolveContainerRef(parts.slice(1), ctx);
   if (root === "tick") return resolveTickRef(parts.slice(1));
 
@@ -123,6 +124,46 @@ function resolveActorRef(parts: string[], ctx: InteractionContext): any {
   if (field === "id") return ctx.actor.id;
   if (field === "short_description") return ctx.actor.short_description;
   if (field === "long_description") return ctx.actor.long_description;
+  return undefined;
+}
+
+function getCarrierAgent(instance: Instance): Agent | null {
+  if (instance.container_type === "agent" && instance.container_id) {
+    return db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(instance.container_id) as Agent | null;
+  }
+  if (instance.container_type === "instance" && instance.container_id) {
+    const parent = db.query("SELECT * FROM instances WHERE id = ?").get(instance.container_id) as Instance | null;
+    if (parent) return getCarrierAgent(parent);
+  }
+  return null;
+}
+
+function resolveCarrierRef(parts: string[], ctx: InteractionContext): any {
+  const carrier = getCarrierAgent(ctx.self);
+  if (!carrier) return undefined;
+  if (parts.length === 0) return carrier.id;
+
+  const field = parts[0]!;
+  if (field === "id") return carrier.id;
+  if (field === "username") return carrier.username;
+  if (field === "short_description") return carrier.short_description;
+  if (field === "long_description") return carrier.long_description;
+
+  // carrier.contents.t:TEMPLATE_ID.fieldname
+  if (field === "contents" && parts.length >= 3) {
+    const templateSpec = parts[1]!;
+    if (templateSpec.startsWith("t:")) {
+      const tplId = templateSpec.slice(2);
+      const contained = db.query(
+        "SELECT * FROM instances WHERE container_type = 'agent' AND container_id = ? AND template_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
+      ).get(carrier.id, tplId) as Instance | null;
+      if (!contained) return undefined;
+      const subField = parts[2]!;
+      const fields = JSON.parse(contained.fields);
+      return fields[subField];
+    }
+  }
+
   return undefined;
 }
 
@@ -249,7 +290,9 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
   }
 
   if (op === "add") {
-    const [, ref, amount] = effect;
+    const [, ref, rawAmount] = effect;
+    const amount = typeof rawAmount === "string" ? resolveRef(rawAmount, ctx) : rawAmount;
+    if (typeof amount !== "number") return;
     const current = resolveRef(ref, ctx);
     const newVal = (typeof current === "number" ? current : 0) + amount;
     setRef(ref, newVal, ctx);
@@ -272,11 +315,11 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     const fromId = resolveRef(fromRef, ctx);
     if (!fromId) return;
 
-    // Determine if the source is an agent (actor) or an instance
-    const isAgent = ctx.actor && fromId === ctx.actor.id;
-    if (!isAgent && !checkEffectPermission(ctx, fromId, "contain")) return;
+    // Determine if the source is an agent or an instance
+    const fromIsAgent = isAgentId(fromId, ctx);
+    if (!fromIsAgent && !checkEffectPermission(ctx, fromId, "contain")) return;
 
-    const containerType = isAgent ? "agent" : "instance";
+    const containerType = fromIsAgent ? "agent" : "instance";
     const thing = db.query(
       "SELECT * FROM instances WHERE template_id = ? AND container_type = ? AND container_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
     ).get(templateId, containerType, fromId) as Instance | null;
@@ -292,16 +335,16 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     const toId = resolveRef(toRef, ctx);
     if (!toId) return;
 
-    // Determine if the destination is an agent (actor) or an instance
-    const isAgent = ctx.actor && toId === ctx.actor.id;
-    if (!isAgent && !checkEffectPermission(ctx, toId, "contain")) return;
+    // Determine if the destination is an agent or an instance
+    const toIsAgent = isAgentId(toId, ctx);
+    if (!toIsAgent && !checkEffectPermission(ctx, toId, "contain")) return;
 
     const thing = db.query(
       "SELECT * FROM instances WHERE template_id = ? AND container_type = 'instance' AND container_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
     ).get(templateId, ctx.self.id) as Instance | null;
     if (!thing) return;
 
-    const containerType = isAgent ? "agent" : "instance";
+    const containerType = toIsAgent ? "agent" : "instance";
     db.query("UPDATE instances SET container_type = ?, container_id = ? WHERE id = ?").run(containerType, toId, thing.id);
     return;
   }
@@ -313,9 +356,9 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     if (!targetId) return;
     const nodeId = resolveRef(destRef, ctx) ?? destRef;
 
-    // If moving self or the actor, always allowed; otherwise check permission
-    const isAgent = ctx.actor && targetId === ctx.actor.id;
-    if (targetId !== ctx.self.id && !isAgent && !checkEffectPermission(ctx, targetId, "contain")) return;
+    // If moving self or an agent, always allowed; otherwise check permission
+    const moveIsAgent = isAgentId(targetId, ctx);
+    if (targetId !== ctx.self.id && !moveIsAgent && !checkEffectPermission(ctx, targetId, "contain")) return;
 
     // Check if target is an agent
     const agent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(targetId) as Agent | null;
@@ -346,8 +389,8 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
     if (!template) return;
 
     // Determine if the target container is an agent or an instance
-    const isAgent = ctx.actor && containerId === ctx.actor.id;
-    const containerType = isAgent ? "agent" : "instance";
+    const createIsAgent = isAgentId(containerId, ctx);
+    const containerType = createIsAgent ? "agent" : "instance";
 
     const id = nanoid();
     db.query(`
@@ -459,6 +502,11 @@ function setRef(ref: string, value: any, ctx: InteractionContext): void {
     db.query("UPDATE instances SET fields = ? WHERE id = ?").run(JSON.stringify(fields), ctx.self.container_id);
     return;
   }
+}
+
+function isAgentId(id: string, ctx: InteractionContext): boolean {
+  if (ctx.actor && id === ctx.actor.id) return true;
+  return !!db.query("SELECT id FROM agents WHERE id = ?").get(id);
 }
 
 function checkEffectPermission(ctx: InteractionContext, targetId: string, permKey: PermissionKey): boolean {

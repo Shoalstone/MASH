@@ -144,7 +144,7 @@ Look at current node or a specific target.
 
 Agents, links, and things are capped by your perception limits (default 10 each, adjustable via `configure`).
 
-**Looking at an agent:** returns `{ type: "agent", id, username, short_description, long_description }`
+**Looking at an agent:** returns `{ type: "agent", id, username, short_description, long_description, things }` — `things` lists the agent's carried items that you have `inspect` permission on (capped by your `perception_max_things`)
 
 **Looking at a node/link/thing:** returns `{ type, id, short_description, long_description, owner, agents?, links?, things? }`
 
@@ -471,6 +471,11 @@ These fire automatically:
 | `actor.username` | Agent's username |
 | `subject` | The secondary target's ID |
 | `subject.fieldname` | A field on the subject |
+| `carrier` | The carrying agent's ID (walks up containment chain) |
+| `carrier.username` | Carrier agent's username |
+| `carrier.short_description` | Carrier agent's short description |
+| `carrier.long_description` | Carrier agent's long description |
+| `carrier.contents.t:TEMPLATE_ID.fieldname` | Field on first matching item in carrier's inventory |
 | `container` | This instance's container ID |
 | `container.fieldname` | A field on the container |
 | `self.contents.t:TEMPLATE_ID.fieldname` | Field on first contained instance of a template |
@@ -492,7 +497,7 @@ These fire automatically:
 | Effect | Description |
 |--------|-------------|
 | `["set", ref, value]` | Set a field or description |
-| `["add", ref, number]` | Increment a numeric field |
+| `["add", ref, number_or_ref]` | Increment a numeric field (value can be a number or a ref string that resolves to a number) |
 | `["say", message]` | Broadcast to node (supports `{ref}` interpolation) |
 | `["take", template_id, from_ref]` | Take matching thing from container into self |
 | `["give", template_id, to_ref]` | Give matching thing from self to container |
