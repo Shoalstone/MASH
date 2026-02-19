@@ -2,7 +2,7 @@ export interface Agent {
   id: string;
   username: string;
   token: string | null;
-  current_node_id: string;
+  current_node_id: string | null;
   short_description: string;
   long_description: string;
   see_broadcasts: number;
@@ -11,7 +11,13 @@ export interface Agent {
   perception_max_things: number;
   home_node_id: string;
   ap: number;
+  last_active_at: number;
   created_at: number;
+}
+
+/** Agent guaranteed to be in a node (post-middleware). */
+export interface ActiveAgent extends Agent {
+  current_node_id: string;
 }
 
 export interface AgentWithHash extends Agent {

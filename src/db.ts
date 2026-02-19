@@ -12,7 +12,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS agents (
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   token TEXT UNIQUE,
-  current_node_id TEXT NOT NULL,
+  current_node_id TEXT,
   short_description TEXT NOT NULL DEFAULT '',
   long_description TEXT NOT NULL DEFAULT '',
   see_broadcasts INTEGER NOT NULL DEFAULT 1,
@@ -21,6 +21,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS agents (
   perception_max_things INTEGER NOT NULL DEFAULT 10,
   home_node_id TEXT NOT NULL,
   ap INTEGER NOT NULL DEFAULT 4,
+  last_active_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 )`);
 
@@ -94,6 +95,9 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_action_queue_tick ON action_queue(tick_n
 db.exec("CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id, id)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_link_usage_agent ON link_usage(agent_id, used_at DESC)");
 
+// Migrations
+try { db.exec("ALTER TABLE agents ADD COLUMN last_active_at INTEGER NOT NULL DEFAULT 0"); } catch {}
+
 // Initialize world state
 const existing = db.query("SELECT value FROM world_state WHERE key = 'tick_number'").get();
 if (!existing) {
@@ -101,6 +105,6 @@ if (!existing) {
   db.exec(`INSERT INTO world_state (key, value) VALUES ('last_tick_at', '${Date.now()}')`);
 }
 
-export const AGENT_COLUMNS = "id, username, token, current_node_id, short_description, long_description, see_broadcasts, perception_max_agents, perception_max_links, perception_max_things, home_node_id, ap, created_at";
+export const AGENT_COLUMNS = "id, username, token, current_node_id, short_description, long_description, see_broadcasts, perception_max_agents, perception_max_links, perception_max_things, home_node_id, ap, last_active_at, created_at";
 
 export default db;

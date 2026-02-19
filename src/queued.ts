@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import db, { AGENT_COLUMNS } from "./db.ts";
 import { MAX_CONTAINMENT_DEPTH, MAX_AP } from "./config.ts";
-import type { Agent, Instance, Template, Permissions, PermissionKey } from "./types.ts";
+import type { Agent, ActiveAgent, Instance, Template, Permissions, PermissionKey } from "./types.ts";
 import { checkPermission, getTemplateOwner, checkContainmentDepth, getContainingNode, isInAgentInventory } from "./engine/permissions.ts";
 import { addEvent, broadcastToNode } from "./response.ts";
 import { getRandomDestination, recordLinkUsage, resetHomeNode } from "./home.ts";
@@ -16,7 +16,7 @@ export function enqueueAction(agentId: string, action: string, params: any, tick
   return { action_id: Number(result.lastInsertRowid) };
 }
 
-function refundAp(agent: Agent, amount: number): void {
+function refundAp(agent: ActiveAgent, amount: number): void {
   if (amount > 0) {
     db.query("UPDATE agents SET ap = MIN(ap + ?, ?) WHERE id = ?").run(amount, MAX_AP, agent.id);
   }
@@ -24,7 +24,7 @@ function refundAp(agent: Agent, amount: number): void {
 
 // --- Action processors (called during tick) ---
 
-export function processCreate(agent: Agent, params: any): any {
+export function processCreate(agent: ActiveAgent, params: any): any {
   const { type } = params;
 
   if (type === "template") {
@@ -35,7 +35,7 @@ export function processCreate(agent: Agent, params: any): any {
   return { error: "type must be 'template' or 'instance'" };
 }
 
-function createTemplate(agent: Agent, params: any): any {
+function createTemplate(agent: ActiveAgent, params: any): any {
   const { name, template_type, short_description, long_description, fields, default_permissions, interactions } = params;
   if (!name || !template_type) return { error: "name and template_type required" };
   if (!["node", "link", "thing"].includes(template_type)) return { error: "template_type must be node, link, or thing" };
@@ -57,7 +57,7 @@ function createTemplate(agent: Agent, params: any): any {
   return { template_id: id };
 }
 
-function createInstance(agent: Agent, params: any): any {
+function createInstance(agent: ActiveAgent, params: any): any {
   const { template_id, container_id, fields: fieldOverrides } = params;
   if (!template_id) return { error: "template_id required" };
 
@@ -106,7 +106,7 @@ function createInstance(agent: Agent, params: any): any {
   return { instance_id: id };
 }
 
-export function processEdit(agent: Agent, params: any): any {
+export function processEdit(agent: ActiveAgent, params: any): any {
   const { target_type, target_id, changes } = params;
   if (!target_id || !changes) return { error: "target_id and changes required" };
 
@@ -118,7 +118,7 @@ export function processEdit(agent: Agent, params: any): any {
   return { error: "target_type must be 'template' or 'instance'" };
 }
 
-function editTemplate(agent: Agent, templateId: string, changes: any): any {
+function editTemplate(agent: ActiveAgent, templateId: string, changes: any): any {
   const template = db.query("SELECT * FROM templates WHERE id = ?").get(templateId) as Template | null;
   if (!template) return { error: "template not found" };
   if (template.owner_id !== agent.id) return { error: "you don't own this template" };
@@ -141,7 +141,7 @@ function editTemplate(agent: Agent, templateId: string, changes: any): any {
   return { updated: true };
 }
 
-function editInstance(agent: Agent, instanceId: string, changes: any): any {
+function editInstance(agent: ActiveAgent, instanceId: string, changes: any): any {
   const instance = db.query("SELECT * FROM instances WHERE id = ?").get(instanceId) as Instance | null;
   if (!instance || instance.is_void || instance.is_destroyed) return { error: "instance not found or is void" };
 
@@ -174,7 +174,7 @@ function editInstance(agent: Agent, instanceId: string, changes: any): any {
   return { updated: true };
 }
 
-export function processDelete(agent: Agent, params: any): any {
+export function processDelete(agent: ActiveAgent, params: any): any {
   const { target_id } = params;
   if (!target_id) return { error: "target_id required" };
 
@@ -238,7 +238,7 @@ function handleVoidCascade(instance: Instance): void {
   }
 }
 
-export function processTravel(agent: Agent, params: any): any {
+export function processTravel(agent: ActiveAgent, params: any): any {
   const { via } = params;
   if (!via) return { error: "via required (link id or array of link ids)" };
 
@@ -320,7 +320,7 @@ export function processTravel(agent: Agent, params: any): any {
   return { arrived_at: currentNodeId, perception };
 }
 
-function generateTravelEvents(agent: Agent, fromNodeId: string, toNodeId: string): void {
+function generateTravelEvents(agent: ActiveAgent, fromNodeId: string, toNodeId: string): void {
   broadcastToNode(fromNodeId, "broadcast", {
     message: `${agent.username} has left.`,
   }, agent.id);
@@ -330,7 +330,7 @@ function generateTravelEvents(agent: Agent, fromNodeId: string, toNodeId: string
   }, agent.id);
 }
 
-function generatePerception(agent: Agent, nodeId: string): any {
+function generatePerception(agent: ActiveAgent, nodeId: string): any {
   const node = db.query("SELECT * FROM instances WHERE id = ?").get(nodeId) as Instance | null;
   if (!node) return {};
 
@@ -354,7 +354,7 @@ function generatePerception(agent: Agent, nodeId: string): any {
   };
 }
 
-export function processHome(agent: Agent): any {
+export function processHome(agent: ActiveAgent): any {
   const originNodeId = agent.current_node_id;
   if (originNodeId === agent.home_node_id) {
     return { error: "you are already home" };
@@ -367,7 +367,7 @@ export function processHome(agent: Agent): any {
   return { arrived_at: agent.home_node_id, perception };
 }
 
-export function processTake(agent: Agent, params: any): any {
+export function processTake(agent: ActiveAgent, params: any): any {
   const { target_id, into } = params;
   if (!target_id) return { error: "target_id required" };
 
@@ -412,7 +412,7 @@ export function processTake(agent: Agent, params: any): any {
   return { taken: true, thing_id: target_id };
 }
 
-export function processDrop(agent: Agent, params: any): any {
+export function processDrop(agent: ActiveAgent, params: any): any {
   const { target_id, into } = params;
   if (!target_id) return { error: "target_id required" };
 
@@ -448,7 +448,7 @@ export function processDrop(agent: Agent, params: any): any {
   return { dropped: true, thing_id: target_id };
 }
 
-export function processCustomVerb(agent: Agent, verb: string, params: any): any {
+export function processCustomVerb(agent: ActiveAgent, verb: string, params: any): any {
   const { target_id, subject_id } = params;
   if (!target_id) return { error: "target_id required" };
 

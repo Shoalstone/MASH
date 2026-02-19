@@ -37,9 +37,9 @@ auth.post("/signup", async (c) => {
   const homeNodeId = createHomeNode(agentId, username);
 
   db.query(`
-    INSERT INTO agents (id, username, password_hash, token, current_node_id, home_node_id, ap, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 4, ?)
-  `).run(agentId, username, passwordHash, token, homeNodeId, homeNodeId, now);
+    INSERT INTO agents (id, username, password_hash, token, current_node_id, home_node_id, ap, last_active_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 4, ?, ?)
+  `).run(agentId, username, passwordHash, token, homeNodeId, homeNodeId, now, now);
 
   return c.json({
     info: null,
@@ -66,7 +66,14 @@ auth.post("/login", async (c) => {
   }
 
   const token = nanoid(32);
-  db.query("UPDATE agents SET token = ? WHERE id = ?").run(token, agent.id);
+  const now = Date.now();
+  db.query("UPDATE agents SET token = ?, last_active_at = ? WHERE id = ?").run(token, now, agent.id);
+
+  // Wake from limbo if needed
+  const full = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(agent.id) as Agent;
+  if (!full.current_node_id) {
+    db.query("UPDATE agents SET current_node_id = ? WHERE id = ?").run(full.home_node_id, full.id);
+  }
 
   return c.json({
     info: null,

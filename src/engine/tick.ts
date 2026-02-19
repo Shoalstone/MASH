@@ -1,6 +1,6 @@
 import db, { AGENT_COLUMNS } from "../db.ts";
-import { TICK_INTERVAL_MS, MAX_AP, EVENT_DELIVERED_TTL_MS, EVENT_UNDELIVERED_TTL_MS } from "../config.ts";
-import type { Agent, ActionQueueEntry, Instance } from "../types.ts";
+import { TICK_INTERVAL_MS, MAX_AP, EVENT_DELIVERED_TTL_MS, EVENT_UNDELIVERED_TTL_MS, IDLE_TIMEOUT_MS } from "../config.ts";
+import type { Agent, ActiveAgent, ActionQueueEntry, Instance } from "../types.ts";
 import { addEvent } from "../response.ts";
 import { fireInteractions } from "./interactions.ts";
 import { processCreate, processEdit, processDelete, processTravel, processHome, processTake, processDrop, processCustomVerb } from "../queued.ts";
@@ -50,9 +50,19 @@ export function processTick(): void {
     db.query(`UPDATE agents SET ap = ${MAX_AP}`).run();
     db.query("UPDATE instances SET interactions_used_this_tick = 0").run();
 
-    // Phase 2: Fire "tick" verb on objects in occupied nodes
+    // Phase 2: Send idle agents to limbo
+    const idleCutoff = Date.now() - IDLE_TIMEOUT_MS;
+    const idleAgents = db.query(
+      `SELECT ${AGENT_COLUMNS} FROM agents WHERE current_node_id IS NOT NULL AND last_active_at < ?`
+    ).all(idleCutoff) as Agent[];
+    for (const agent of idleAgents) {
+      db.query("UPDATE agents SET current_node_id = NULL WHERE id = ?").run(agent.id);
+      addEvent(agent.id, "system", { message: "You drift off into a deep sleep." });
+    }
+
+    // Phase 3: Fire "tick" verb on objects in occupied nodes
     const occupiedNodes = db.query(
-      "SELECT DISTINCT current_node_id FROM agents"
+      "SELECT DISTINCT current_node_id FROM agents WHERE current_node_id IS NOT NULL"
     ).all() as { current_node_id: string }[];
 
     for (const { current_node_id } of occupiedNodes) {
@@ -69,17 +79,18 @@ export function processTick(): void {
       }
     }
 
-    // Phase 3: Process action queue
+    // Phase 4: Process action queue
     const actions = db.query(
       "SELECT * FROM action_queue WHERE tick_number <= ? ORDER BY id"
     ).all(tickNumber) as ActionQueueEntry[];
 
     for (const action of actions) {
       const agent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(action.agent_id) as Agent | null;
-      if (!agent) {
+      if (!agent || !agent.current_node_id) {
         db.query("DELETE FROM action_queue WHERE id = ?").run(action.id);
         continue;
       }
+      const activeAgent = agent as ActiveAgent;
 
       const params = JSON.parse(action.params);
       let result: any;
@@ -87,29 +98,29 @@ export function processTick(): void {
       try {
         switch (action.action) {
           case "create":
-            result = processCreate(agent, params);
+            result = processCreate(activeAgent, params);
             break;
           case "edit":
-            result = processEdit(agent, params);
+            result = processEdit(activeAgent, params);
             break;
           case "delete":
-            result = processDelete(agent, params);
+            result = processDelete(activeAgent, params);
             break;
           case "travel":
-            result = processTravel(agent, params);
+            result = processTravel(activeAgent, params);
             break;
           case "home":
-            result = processHome(agent);
+            result = processHome(activeAgent);
             break;
           case "take":
-            result = processTake(agent, params);
+            result = processTake(activeAgent, params);
             break;
           case "drop":
-            result = processDrop(agent, params);
+            result = processDrop(activeAgent, params);
             break;
           default:
             // Custom verb
-            result = processCustomVerb(agent, action.action, params);
+            result = processCustomVerb(activeAgent, action.action, params);
             break;
         }
       } catch (err: any) {
@@ -118,7 +129,7 @@ export function processTick(): void {
       }
 
       // Store result as event for the agent
-      addEvent(agent.id, "action_result", {
+      addEvent(activeAgent.id, "action_result", {
         action: action.action,
         action_id: action.id,
         result,
@@ -127,7 +138,7 @@ export function processTick(): void {
       db.query("DELETE FROM action_queue WHERE id = ?").run(action.id);
     }
 
-    // Phase 4: Cleanup old events
+    // Phase 5: Cleanup old events
     const now = Date.now();
     // Events that have been delivered (consumed) won't exist, but clean up any lingering ones
     db.query("DELETE FROM events WHERE created_at < ?").run(now - EVENT_UNDELIVERED_TTL_MS);

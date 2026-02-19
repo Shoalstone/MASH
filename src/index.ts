@@ -2,12 +2,12 @@ import { Hono } from "hono";
 import db from "./db.ts";
 import auth, { getAgentByToken } from "./auth.ts";
 import actions from "./actions.ts";
-import { buildResponse } from "./response.ts";
+import { buildResponse, addEvent } from "./response.ts";
 import { startTickLoop, waitForNextTick } from "./engine/tick.ts";
 import { PORT } from "./config.ts";
-import type { Agent } from "./types.ts";
+import type { Agent, ActiveAgent } from "./types.ts";
 
-const app = new Hono<{ Variables: { agent: Agent } }>();
+const app = new Hono<{ Variables: { agent: ActiveAgent } }>();
 
 // Health check
 app.get("/health", (c) => {
@@ -23,47 +23,35 @@ app.get("/health", (c) => {
 app.route("/auth", auth);
 
 // Auth middleware for everything below
-app.use("/action/*", async (c, next) => {
+async function authenticate(c: any, next: any) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return c.json({ error: "missing or invalid Authorization header" }, 401);
   }
   const token = authHeader.slice(7);
-  const agent = getAgentByToken(token);
+  let agent = getAgentByToken(token);
   if (!agent) {
     return c.json({ error: "invalid token" }, 401);
   }
-  c.set("agent", agent);
-  await next();
-});
 
-app.use("/poll", async (c, next) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return c.json({ error: "missing or invalid Authorization header" }, 401);
-  }
-  const token = authHeader.slice(7);
-  const agent = getAgentByToken(token);
-  if (!agent) {
-    return c.json({ error: "invalid token" }, 401);
-  }
-  c.set("agent", agent);
-  await next();
-});
+  // Track activity
+  const now = Date.now();
+  db.query("UPDATE agents SET last_active_at = ? WHERE id = ?").run(now, agent.id);
 
-app.use("/wait", async (c, next) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return c.json({ error: "missing or invalid Authorization header" }, 401);
+  // Wake from limbo
+  if (!agent.current_node_id) {
+    db.query("UPDATE agents SET current_node_id = ? WHERE id = ?").run(agent.home_node_id, agent.id);
+    addEvent(agent.id, "system", { message: "You wake up at home." });
+    agent = getAgentByToken(token)!;
   }
-  const token = authHeader.slice(7);
-  const agent = getAgentByToken(token);
-  if (!agent) {
-    return c.json({ error: "invalid token" }, 401);
-  }
-  c.set("agent", agent);
+
+  c.set("agent", agent as ActiveAgent);
   await next();
-});
+}
+
+app.use("/action/*", authenticate);
+app.use("/poll", authenticate);
+app.use("/wait", authenticate);
 
 // Poll endpoint
 app.post("/poll", (c) => {

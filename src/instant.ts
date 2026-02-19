@@ -1,10 +1,10 @@
 import db, { AGENT_COLUMNS } from "./db.ts";
-import type { Agent, Instance, Template } from "./types.ts";
+import type { Agent, ActiveAgent, Instance, Template } from "./types.ts";
 import { checkPermission, getTemplateOwner, getContainingNode, isInAgentInventory } from "./engine/permissions.ts";
 import { getLinkIndex } from "./home.ts";
 import { broadcastToNode } from "./response.ts";
 
-export function handleLook(agent: Agent, params: any): any {
+export function handleLook(agent: ActiveAgent, params: any): any {
   const targetId = params.target_id;
 
   if (!targetId) {
@@ -100,7 +100,7 @@ export function handleLook(agent: Agent, params: any): any {
   return result;
 }
 
-function lookAtCurrentNode(agent: Agent): any {
+function lookAtCurrentNode(agent: ActiveAgent): any {
   const node = db.query("SELECT * FROM instances WHERE id = ?").get(agent.current_node_id) as Instance | null;
   if (!node) {
     return { error: "current node not found" };
@@ -135,7 +135,7 @@ function lookAtCurrentNode(agent: Agent): any {
   };
 }
 
-export function handleSurvey(agent: Agent, params: any): any {
+export function handleSurvey(agent: ActiveAgent, params: any): any {
   const category = params.category;
   const result: any = {};
 
@@ -164,7 +164,7 @@ export function handleSurvey(agent: Agent, params: any): any {
   return result;
 }
 
-export function handleInspect(agent: Agent, params: any): any {
+export function handleInspect(agent: ActiveAgent, params: any): any {
   const { target_id } = params;
   if (!target_id) return { error: "target_id required" };
 
@@ -210,7 +210,7 @@ export function handleInspect(agent: Agent, params: any): any {
   return result;
 }
 
-export function handleSay(agent: Agent, params: any): any {
+export function handleSay(agent: ActiveAgent, params: any): any {
   const { message } = params;
   if (!message || typeof message !== "string") {
     return { error: "message must be a non-empty string", received_keys: Object.keys(params), message_type: typeof message };
@@ -229,7 +229,7 @@ export function handleSay(agent: Agent, params: any): any {
   return { delivered_to: agentCount.count };
 }
 
-export function handleList(agent: Agent, params: any): any {
+export function handleList(agent: ActiveAgent, params: any): any {
   const { template_id } = params;
   if (!template_id) return { error: "template_id required" };
 
