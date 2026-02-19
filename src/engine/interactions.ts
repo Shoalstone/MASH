@@ -307,10 +307,11 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
   }
 
   if (op === "move") {
-    // move ref to node_id
-    const [, ref, nodeId] = effect;
+    // move ref to node_id (or ref that resolves to a node_id)
+    const [, ref, destRef] = effect;
     const targetId = resolveRef(ref, ctx);
     if (!targetId) return;
+    const nodeId = resolveRef(destRef, ctx) ?? destRef;
 
     // If moving self or the actor, always allowed; otherwise check permission
     const isAgent = ctx.actor && targetId === ctx.actor.id;
