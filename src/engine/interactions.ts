@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import db from "../db.ts";
 import { MAX_INTERACTIONS_PER_TICK } from "../config.ts";
-import type { Agent, Instance, Template, Interaction, Condition, Effect, Permissions, PermissionKey } from "../types.ts";
+import type { Agent, Instance, Template, Interaction, Condition, Effect, EffectEntry, ConditionalBlock, Permissions, PermissionKey } from "../types.ts";
 import { checkPermission } from "./permissions.ts";
 import { broadcastToNode, addEvent } from "../response.ts";
 import { getContainingNode } from "./permissions.ts";
@@ -199,12 +199,12 @@ function evaluateCondition(condition: Condition, ctx: InteractionContext): boole
     return typeof val === "number" && val < condition[2];
   }
   if (op === "has") {
-    // Check if ref (an instance) contains an instance of template_id
+    // Check if ref (an instance or agent) contains an instance of template_id
     const containerId = resolveRef(condition[1], ctx);
     if (!containerId) return false;
     const templateId = condition[2];
     const found = db.query(
-      "SELECT id FROM instances WHERE container_type = 'instance' AND container_id = ? AND template_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
+      "SELECT id FROM instances WHERE container_id = ? AND template_id = ? AND is_void = 0 AND is_destroyed = 0 LIMIT 1"
     ).get(containerId, templateId);
     return !!found;
   }
@@ -214,10 +214,23 @@ function evaluateCondition(condition: Condition, ctx: InteractionContext): boole
 
 // --- Effect Execution ---
 
-function executeEffects(effects: Effect[], ctx: InteractionContext): void {
-  for (const effect of effects) {
+function isConditionalBlock(entry: EffectEntry): entry is ConditionalBlock {
+  return !Array.isArray(entry) && typeof entry === "object" && entry !== null && "do" in entry;
+}
+
+function executeEffects(effects: EffectEntry[], ctx: InteractionContext): void {
+  for (const entry of effects) {
     if (ctx.denied) break;
-    executeEffect(effect, ctx);
+    if (isConditionalBlock(entry)) {
+      const conditionsMet = entry.if ? evaluateConditions(entry.if, ctx) : true;
+      if (conditionsMet) {
+        executeEffects(entry.do, ctx);
+      } else if (entry.else) {
+        executeEffects(entry.else, ctx);
+      }
+    } else {
+      executeEffect(entry, ctx);
+    }
   }
 }
 

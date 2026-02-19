@@ -7,7 +7,7 @@ import { startTickLoop } from "./engine/tick.ts";
 import { PORT } from "./config.ts";
 import type { Agent } from "./types.ts";
 
-const app = new Hono();
+const app = new Hono<{ Variables: { agent: Agent } }>();
 
 // Health check
 app.get("/health", (c) => {

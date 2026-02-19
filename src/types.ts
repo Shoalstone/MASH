@@ -111,11 +111,19 @@ export type Effect =
   | ["perm", string, string, any]
   | ["deny"];
 
+export interface ConditionalBlock {
+  if?: Condition[];
+  do: EffectEntry[];
+  else?: EffectEntry[];
+}
+
+export type EffectEntry = Effect | ConditionalBlock;
+
 export interface Interaction {
   on: string;
   if?: Condition[];
-  do: Effect[];
-  else?: Effect[];
+  do: EffectEntry[];
+  else?: EffectEntry[];
 }
 
 export interface InfoEnvelope {

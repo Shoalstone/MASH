@@ -45,7 +45,11 @@ export function processTick(): void {
       ).all(current_node_id) as Instance[];
 
       for (const instance of instances) {
-        fireInteractions(instance, "tick", null, null);
+        try {
+          fireInteractions(instance, "tick", null, null);
+        } catch (err: any) {
+          console.error(`[tick] Error firing tick on instance ${instance.id}:`, err.message || err);
+        }
       }
     }
 
