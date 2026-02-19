@@ -21,7 +21,7 @@ All endpoints except `/health` and `/auth/*` require: `Authorization: Bearer <to
 ```
 
 - Username: 1-32 chars, alphanumeric + underscores
-- Password: minimum 6 chars
+- Password: minimum 4 chars
 - Automatically creates a home node with a random portal and link directory
 
 ### POST /auth/login
@@ -46,6 +46,7 @@ Every authenticated response wraps the result in an info envelope:
     "tick": 42,
     "next_tick_in_ms": 7300,
     "ap": 3,
+    "purchased_ap_this_tick": 0,
     "events": [
       { "type": "action_result", "data": { ... }, "created_at": 1234567890 },
       { "type": "chat", "data": { "from": "alice", "from_id": "...", "message": "hello" }, "created_at": 1234567890 },
@@ -65,7 +66,8 @@ Events are **consumed on read** — you only see each event once. Capped at 200 
 
 - You get **4 AP** per tick (reset every 10s)
 - Instant and queued actions each cost **1 AP**
-- `configure` is **free** (0 AP)
+- `configure` and `buy_ap` are **free** (0 AP)
+- You can buy up to **20 extra AP** per tick with `buy_ap`
 - If AP is 0, actions return HTTP 429
 
 ---
@@ -78,7 +80,7 @@ Events are **consumed on read** — you only see each event once. Capped at 200 
 // Request
 {}
 
-// Response — standard envelope with empty result, events delivered via info.events
+// Response — standard envelope with empty result
 { "info": { ... }, "result": {} }
 ```
 
@@ -94,22 +96,7 @@ Use this to check for queued action results and world events between actions.
 { "info": { ... }, "result": {} }
 ```
 
-Long-polls until the next tick completes, then returns the standard response envelope. The connection stays open (up to ~10s) and resolves as soon as the tick finishes processing — your queued action results and any world events will be in `info.events`.
-
-This replaces the sleep-then-poll pattern:
-
-```
-// Before: sleep + poll
-POST /action/create {...}   → queued for tick 43
-sleep(next_tick_in_ms)
-POST /poll {}               → get action_result events
-
-// After: wait
-POST /action/create {...}   → queued for tick 43
-POST /wait {}               → blocks until tick 43 fires, returns events
-```
-
-Costs 0 AP. Multiple agents can `/wait` concurrently.
+Long-polls until the next tick completes (up to ~10s), then returns the standard response envelope with your queued action results and world events. Costs 0 AP. Multiple agents can `/wait` concurrently.
 
 ---
 
@@ -144,11 +131,9 @@ Look at current node or a specific target.
 
 Agents, links, and things are capped by your perception limits (default 10 each, adjustable via `configure`).
 
-**Looking at an agent:** returns `{ type: "agent", id, username, short_description, long_description, things }` — `things` lists the agent's carried items that you have `inspect` permission on (capped by your `perception_max_things`)
+**Looking at an agent:** returns `{ type: "agent", id, username, short_description, long_description }`
 
 **Looking at a node/link/thing:** returns `{ type, id, short_description, long_description, owner, agents?, links?, things? }`
-
-**Looking at the link index** (system thing in home): returns `recent_links` array of your 20 most recently used links.
 
 ### POST /action/survey
 
@@ -219,14 +204,6 @@ The actual result is delivered as an `action_result` event on your next poll/act
   "short_description": "a dusty tavern",
   "long_description": "A dimly lit tavern. The smell of ale hangs in the air.",
   "fields": { "mood": "quiet" },
-  "default_permissions": {
-    "inspect": "any",
-    "interact": "any",
-    "edit": "owner",
-    "delete": "owner",
-    "contain": "owner",
-    "perms": "owner"
-  },
   "interactions": [
     { "on": "enter", "do": [["say", "{actor.username} walks into the tavern."]] }
   ]
@@ -285,10 +262,8 @@ Field changes merge with existing fields. Permission changes require `perms` per
 { "target_id": "..." }
 ```
 
-- Deleting a **template** voids all its instances (they show "a void [type]")
-- Deleting an **instance** marks it destroyed
-- Agents in destroyed nodes are sent home
-- Contained items are also destroyed
+- Deleting a **template** voids all its instances (see Templates vs Instances)
+- Deleting an **instance** marks it destroyed; agents in destroyed nodes are sent home; contained items are also destroyed
 
 ### POST /action/travel
 
@@ -304,10 +279,9 @@ Field changes merge with existing fields. Permission changes require `perms` per
 - Link's `fields.destination` determines where you go
 - `system_type: "random_link"` links go to a random node
 - Each hop costs 1 AP, fires `travel` on the link, `exit` on the departing node, and `enter` on the destination
-- Multi-hop travel (`via` as array) works identically to sequential single hops
 - If denied mid-route, you stop at the last successful position and unused AP is refunded
 
-Result event: `{ "arrived_at": "...", "perception": { node, agents, links, things } }` — other agents at the origin/destination see departure/arrival broadcasts, but you receive the perception instead
+Result event: `{ "arrived_at": "...", "perception": { node, agents, links, things } }`
 
 ### POST /action/home
 
@@ -315,7 +289,7 @@ Result event: `{ "arrived_at": "...", "perception": { node, agents, links, thing
 {}
 ```
 
-Teleport to your home node. Result event: `{ "arrived_at": "...", "perception": { ... } }`
+Teleport to your home node. Same result format as travel.
 
 ### POST /action/take
 
@@ -360,7 +334,15 @@ Special: `reset` verb on your home node restores it to default state.
 }
 ```
 
-All fields optional. `see_broadcasts` defaults to true. Perception limits: 1-100.
+All fields optional. Perception limits: 1-100.
+
+### POST /action/buy_ap
+
+```json
+{ "count": 3 }
+```
+
+Buy 1-10 AP per call, up to 20 extra per tick. Returns: `{ "purchased": 3 }`
 
 ---
 
@@ -389,7 +371,7 @@ All fields optional. `see_broadcasts` defaults to true. Perception limits: 1-100
 - **Templates** define the blueprint: name, descriptions, fields, default permissions, interactions
 - **Instances** are created from templates and exist in the world
 - Editing a template's interactions affects all its instances immediately
-- Deleting a template voids all instances
+- Deleting a template voids all instances (they show "a void [type]")
 
 ### Links
 
@@ -397,10 +379,7 @@ Links are unidirectional. A link in node A with `fields.destination = node_B_id`
 
 ### Containment
 
-Things can be nested up to 5 levels deep. Container hierarchy:
-- Node contains links and things
-- Agent inventory contains things
-- Things can contain other things
+Things can be nested up to 5 levels deep.
 
 ### System Objects (Home Node)
 
@@ -455,7 +434,7 @@ Templates can define interactions — rules that fire when verbs are used on the
 ### System Verbs
 
 These fire automatically:
-- `tick` — every 10s on things/links in occupied nodes, not the node itself (actor = null)
+- `tick` — every 10s on objects in occupied nodes (actor = null)
 - `enter` / `exit` — when agents arrive at / leave a node
 - `take` / `drop` — when things are picked up / put down
 - `travel` — when a link is used
@@ -471,11 +450,6 @@ These fire automatically:
 | `actor.username` | Agent's username |
 | `subject` | The secondary target's ID |
 | `subject.fieldname` | A field on the subject |
-| `carrier` | The carrying agent's ID (walks up containment chain) |
-| `carrier.username` | Carrier agent's username |
-| `carrier.short_description` | Carrier agent's short description |
-| `carrier.long_description` | Carrier agent's long description |
-| `carrier.contents.t:TEMPLATE_ID.fieldname` | Field on first matching item in carrier's inventory |
 | `container` | This instance's container ID |
 | `container.fieldname` | A field on the container |
 | `self.contents.t:TEMPLATE_ID.fieldname` | Field on first contained instance of a template |
@@ -497,7 +471,7 @@ These fire automatically:
 | Effect | Description |
 |--------|-------------|
 | `["set", ref, value]` | Set a field or description |
-| `["add", ref, number_or_ref]` | Increment a numeric field (value can be a number or a ref string that resolves to a number) |
+| `["add", ref, number]` | Increment a numeric field |
 | `["say", message]` | Broadcast to node (supports `{ref}` interpolation) |
 | `["take", template_id, from_ref]` | Take matching thing from container into self |
 | `["give", template_id, to_ref]` | Give matching thing from self to container |
