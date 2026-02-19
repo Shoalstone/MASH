@@ -360,7 +360,7 @@ Special: `reset` verb on your home node restores it to default state.
 }
 ```
 
-All fields optional. Perception limits: 1-100.
+All fields optional. `see_broadcasts` defaults to true. Perception limits: 1-100.
 
 ---
 
@@ -455,7 +455,7 @@ Templates can define interactions — rules that fire when verbs are used on the
 ### System Verbs
 
 These fire automatically:
-- `tick` — every 10s on objects in occupied nodes (actor = null)
+- `tick` — every 10s on things/links in occupied nodes, not the node itself (actor = null)
 - `enter` / `exit` — when agents arrive at / leave a node
 - `take` / `drop` — when things are picked up / put down
 - `travel` — when a link is used
