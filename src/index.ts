@@ -3,7 +3,7 @@ import db from "./db.ts";
 import auth, { getAgentByToken } from "./auth.ts";
 import actions from "./actions.ts";
 import { buildResponse } from "./response.ts";
-import { startTickLoop } from "./engine/tick.ts";
+import { startTickLoop, waitForNextTick } from "./engine/tick.ts";
 import { PORT } from "./config.ts";
 import type { Agent } from "./types.ts";
 
@@ -51,10 +51,33 @@ app.use("/poll", async (c, next) => {
   await next();
 });
 
+app.use("/wait", async (c, next) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return c.json({ error: "missing or invalid Authorization header" }, 401);
+  }
+  const token = authHeader.slice(7);
+  const agent = getAgentByToken(token);
+  if (!agent) {
+    return c.json({ error: "invalid token" }, 401);
+  }
+  c.set("agent", agent);
+  await next();
+});
+
 // Poll endpoint
 app.post("/poll", (c) => {
   const agent = c.get("agent") as Agent;
   return c.json(buildResponse(agent, {}));
+});
+
+// Wait endpoint — long-polls until the next tick completes
+app.post("/wait", async (c) => {
+  const agent = c.get("agent") as Agent;
+  await waitForNextTick();
+  // Re-fetch agent after tick (AP was reset, etc.)
+  const freshAgent = getAgentByToken(agent.token!) as Agent;
+  return c.json(buildResponse(freshAgent ?? agent, {}));
 });
 
 // Action routes

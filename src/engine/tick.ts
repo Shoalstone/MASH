@@ -7,6 +7,22 @@ import { processCreate, processEdit, processDelete, processTravel, processHome, 
 
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 
+// Long-poll waiters: resolved when the next tick completes
+const tickWaiters: Set<() => void> = new Set();
+
+export function waitForNextTick(): Promise<void> {
+  return new Promise((resolve) => {
+    tickWaiters.add(resolve);
+  });
+}
+
+function resolveTickWaiters(): void {
+  for (const resolve of tickWaiters) {
+    resolve();
+  }
+  tickWaiters.clear();
+}
+
 export function startTickLoop(): void {
   if (tickTimer) return;
   console.log(`[tick] Starting tick loop (${TICK_INTERVAL_MS}ms interval)`);
@@ -119,7 +135,12 @@ export function processTick(): void {
     if (elapsed > 1000) {
       console.log(`[tick] Tick ${tickNumber} took ${elapsed}ms`);
     }
+
+    // Unblock any long-polling /wait connections
+    resolveTickWaiters();
   } catch (err) {
     console.error("[tick] Error during tick:", err);
+    // Still unblock waiters on error so they don't hang
+    resolveTickWaiters();
   }
 }
