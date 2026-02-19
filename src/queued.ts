@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import db, { AGENT_COLUMNS } from "./db.ts";
-import { MAX_CONTAINMENT_DEPTH } from "./config.ts";
+import { MAX_CONTAINMENT_DEPTH, MAX_AP } from "./config.ts";
 import type { Agent, Instance, Template, Permissions, PermissionKey } from "./types.ts";
 import { checkPermission, getTemplateOwner, checkContainmentDepth, getContainingNode, isInAgentInventory } from "./engine/permissions.ts";
 import { addEvent, broadcastToNode } from "./response.ts";
@@ -18,7 +18,7 @@ export function enqueueAction(agentId: string, action: string, params: any, tick
 
 function refundAp(agent: Agent, amount: number): void {
   if (amount > 0) {
-    db.query("UPDATE agents SET ap = ap + ? WHERE id = ?").run(amount, agent.id);
+    db.query("UPDATE agents SET ap = MIN(ap + ?, ?) WHERE id = ?").run(amount, MAX_AP, agent.id);
   }
 }
 
