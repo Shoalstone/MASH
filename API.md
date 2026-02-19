@@ -305,9 +305,9 @@ Field changes merge with existing fields. Permission changes require `perms` per
 - Links must be in your current node
 - Link's `fields.destination` determines where you go
 - `system_type: "random_link"` links go to a random node
-- Serial travel fires `pass` verb on intermediate links, `travel` on the last
-- Origin fires `exit`, final destination fires `enter`
-- If denied mid-route, you stop at the last successful position
+- Each hop costs 1 AP, fires `travel` on the link, `exit` on the departing node, and `enter` on the destination
+- Multi-hop travel (`via` as array) works identically to sequential single hops
+- If denied mid-route, you stop at the last successful position and unused AP is refunded
 
 Result event: `{ "arrived_at": "...", "perception": { node, agents, links, things } }`
 
@@ -468,8 +468,7 @@ These fire automatically:
 - `tick` — every 10s on objects in occupied nodes (actor = null)
 - `enter` / `exit` — when agents arrive at / leave a node
 - `take` / `drop` — when things are picked up / put down
-- `travel` — when a link is used (single travel)
-- `pass` — when a link is traversed during serial travel (intermediate links)
+- `travel` — when a link is used
 
 ### References
 

@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import db from "./db.ts";
 import { MAX_CONTAINMENT_DEPTH } from "./config.ts";
 import type { Agent, Instance, Template, Permissions, PermissionKey } from "./types.ts";
-import { checkPermission, getTemplateOwner, checkContainmentDepth, getContainingNode, checkHomeNodeAccess } from "./engine/permissions.ts";
+import { checkPermission, getTemplateOwner, checkContainmentDepth, getContainingNode } from "./engine/permissions.ts";
 import { addEvent, broadcastToNode } from "./response.ts";
 import { getRandomDestination, recordLinkUsage, resetHomeNode } from "./home.ts";
 import { fireInteractions } from "./engine/interactions.ts";
@@ -14,6 +14,12 @@ export function enqueueAction(agentId: string, action: string, params: any, tick
     "INSERT INTO action_queue (agent_id, action, params, tick_number, created_at) VALUES (?, ?, ?, ?, ?)"
   ).run(agentId, action, JSON.stringify(params), tickNumber, Date.now());
   return { action_id: Number(result.lastInsertRowid) };
+}
+
+function refundAp(agent: Agent, amount: number): void {
+  if (amount > 0) {
+    db.query("UPDATE agents SET ap = ap + ? WHERE id = ?").run(amount, agent.id);
+  }
 }
 
 // --- Action processors (called during tick) ---
@@ -239,27 +245,21 @@ export function processTravel(agent: Agent, params: any): any {
   const linkIds = Array.isArray(via) ? via : [via];
   if (linkIds.length === 0) return { error: "via must not be empty" };
 
-  const isSerial = linkIds.length > 1;
-
-  // Check home node access for current position
-  if (!checkHomeNodeAccess(agent, agent.current_node_id)) {
-    // Still allow leaving — only restrict actions IN the node
-  }
-
-  const originNodeId = agent.current_node_id;
   let currentNodeId = agent.current_node_id;
 
   for (let i = 0; i < linkIds.length; i++) {
     const linkId = linkIds[i]!;
-    const isLast = i === linkIds.length - 1;
+    const fromNodeId = currentNodeId;
 
     const link = db.query("SELECT * FROM instances WHERE id = ? AND type = 'link'").get(linkId) as Instance | null;
     if (!link || link.is_void || link.is_destroyed) {
+      refundAp(agent, linkIds.length - i);
       return { error: `link ${linkId} not found or is void` };
     }
 
     // Link must be in agent's current node
     if (link.container_type !== "instance" || link.container_id !== currentNodeId) {
+      refundAp(agent, linkIds.length - i);
       return { error: `link ${linkId} is not in your current node` };
     }
 
@@ -267,57 +267,54 @@ export function processTravel(agent: Agent, params: any): any {
     let destinationId: string | null;
     if (link.system_type === "random_link") {
       destinationId = getRandomDestination(currentNodeId);
-      if (!destinationId) return { error: "no available destinations" };
+      if (!destinationId) {
+        refundAp(agent, linkIds.length - i);
+        return { error: "no available destinations" };
+      }
     } else {
       const fields = JSON.parse(link.fields);
       destinationId = fields.destination;
-      if (!destinationId) return { error: `link ${linkId} has no destination` };
+      if (!destinationId) {
+        refundAp(agent, linkIds.length - i);
+        return { error: `link ${linkId} has no destination` };
+      }
     }
 
     // Verify destination exists and isn't void
     const destNode = db.query("SELECT * FROM instances WHERE id = ? AND type = 'node' AND is_void = 0 AND is_destroyed = 0").get(destinationId) as Instance | null;
-    if (!destNode) return { error: "destination node not found or is void" };
+    if (!destNode) {
+      refundAp(agent, linkIds.length - i);
+      return { error: "destination node not found or is void" };
+    }
 
-    // Fire verb on link
-    const verb = isSerial && !isLast ? "pass" : "travel";
-    const denied = fireInteractions(link, verb, agent, null);
-    if (denied) {
-      // Agent stays at current position
-      if (currentNodeId !== originNodeId) {
-        // Already moved some — finalize at current position
-        db.query("UPDATE agents SET current_node_id = ? WHERE id = ?").run(currentNodeId, agent.id);
-        generateTravelEvents(agent, originNodeId, currentNodeId);
-      }
+    // Fire travel on link
+    if (fireInteractions(link, "travel", agent, null)) {
+      refundAp(agent, linkIds.length - i - 1);
       return { error: `travel denied by ${link.short_description}`, stopped_at: currentNodeId };
     }
 
+    // Fire exit on departing node
+    const fromNode = db.query("SELECT * FROM instances WHERE id = ?").get(fromNodeId) as Instance | null;
+    if (fromNode && fireInteractions(fromNode, "exit", agent, null)) {
+      refundAp(agent, linkIds.length - i - 1);
+      return { error: "exit denied by node", stopped_at: currentNodeId };
+    }
+
+    // Fire enter on destination node
+    if (fireInteractions(destNode, "enter", agent, null)) {
+      refundAp(agent, linkIds.length - i - 1);
+      return { error: "entry denied by destination node", stopped_at: currentNodeId };
+    }
+
+    // Move agent to this hop's destination
     const destName = destNode.short_description || "";
     recordLinkUsage(agent.id, linkId, destinationId, destName);
     currentNodeId = destinationId;
+    db.query("UPDATE agents SET current_node_id = ? WHERE id = ?").run(currentNodeId, agent.id);
+    generateTravelEvents(agent, fromNodeId, currentNodeId);
   }
 
-  // Fire exit on origin node, enter on final destination
-  const originNode = db.query("SELECT * FROM instances WHERE id = ?").get(originNodeId) as Instance | null;
-  if (originNode) {
-    const exitDenied = fireInteractions(originNode, "exit", agent, null);
-    if (exitDenied) {
-      return { error: "exit denied by origin node" };
-    }
-  }
-
-  const destNode = db.query("SELECT * FROM instances WHERE id = ?").get(currentNodeId) as Instance | null;
-  if (destNode) {
-    const enterDenied = fireInteractions(destNode, "enter", agent, null);
-    if (enterDenied) {
-      return { error: "entry denied by destination node" };
-    }
-  }
-
-  // Move agent
-  db.query("UPDATE agents SET current_node_id = ? WHERE id = ?").run(currentNodeId, agent.id);
-  generateTravelEvents(agent, originNodeId, currentNodeId);
-
-  // Generate perception for the agent
+  // Generate perception for the final position
   const perception = generatePerception(agent, currentNodeId);
 
   return { arrived_at: currentNodeId, perception };

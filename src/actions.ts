@@ -34,12 +34,15 @@ actions.post("/:verb", async (c) => {
 
   // Check AP
   const freshAgent = db.query("SELECT * FROM agents WHERE id = ?").get(agent.id) as Agent;
-  if (freshAgent.ap <= 0) {
+
+  // Travel costs 1 AP per hop
+  const apCost = verb === "travel" && Array.isArray(body.via) ? body.via.length : 1;
+  if (freshAgent.ap < apCost) {
     return c.json(buildResponse(freshAgent, { error: "no AP remaining" }), 429);
   }
 
   // Deduct AP
-  db.query("UPDATE agents SET ap = ap - 1 WHERE id = ?").run(agent.id);
+  db.query("UPDATE agents SET ap = ap - ? WHERE id = ?").run(apCost, agent.id);
 
   // Instant actions
   if (INSTANT_ACTIONS.has(verb)) {
