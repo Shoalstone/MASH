@@ -198,7 +198,9 @@ export function handleInspect(agent: Agent, params: any): any {
 
 export function handleSay(agent: Agent, params: any): any {
   const { message } = params;
-  if (!message || typeof message !== "string") return { error: "message required" };
+  if (!message || typeof message !== "string") {
+    return { error: "message must be a non-empty string", received_keys: Object.keys(params), message_type: typeof message };
+  }
 
   broadcastToNode(agent.current_node_id, "chat", {
     from: agent.username,

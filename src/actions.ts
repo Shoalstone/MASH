@@ -16,7 +16,13 @@ const FREE_ACTIONS = new Set(["configure", "buy_ap"]);
 actions.post("/:verb", async (c) => {
   const agent = c.get("agent");
   const verb = c.req.param("verb");
-  const body = await c.req.json().catch(() => ({}));
+  let body: any;
+  const rawBody = await c.req.text();
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: "invalid JSON body", received: rawBody.slice(0, 200) }, 400);
+  }
 
   // Free actions (0 AP)
   if (verb === "configure") {
