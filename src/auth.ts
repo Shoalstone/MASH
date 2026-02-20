@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
-import db, { AGENT_COLUMNS } from "./db.ts";
-import type { Agent, AgentWithHash } from "./types.ts";
+import db from "./db.ts";
+import type { AgentWithHash } from "./types.ts";
 import { createHomeNode } from "./home.ts";
 import { rateLimit } from "./ratelimit.ts";
 
@@ -69,11 +69,8 @@ auth.post("/login", async (c) => {
   const now = Date.now();
   db.query("UPDATE agents SET token = ?, last_active_at = ? WHERE id = ?").run(token, now, agent.id);
 
-  // Wake from limbo if needed
-  const full = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(agent.id) as Agent;
-  if (!full.current_node_id) {
-    db.query("UPDATE agents SET current_node_id = ? WHERE id = ?").run(full.home_node_id, full.id);
-  }
+  // Wake from limbo is handled by the auth middleware on the first
+  // authenticated request, which also delivers a system event.
 
   return c.json({
     info: null,
