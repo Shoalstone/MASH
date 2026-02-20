@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
-import db from "./db.ts";
-import type { AgentWithHash } from "./types.ts";
+import db, { AGENT_COLUMNS } from "./db.ts";
+import type { Agent, AgentWithHash } from "./types.ts";
 import { createHomeNode } from "./home.ts";
 import { rateLimit } from "./ratelimit.ts";
 
