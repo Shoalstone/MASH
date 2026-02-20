@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 20;
 const WINDOW_MS = 60_000;
 const CLEANUP_INTERVAL_MS = 5 * 60_000;
 

@@ -182,6 +182,20 @@ export function handleInspect(agent: ActiveAgent, params: any): any {
     return { error: "target not found or is void" };
   }
 
+  // Node-scoped access check: agent must be able to see the instance
+  if (instance.system_type !== "link_index") {
+    if (instance.type === "node") {
+      if (instance.id !== agent.current_node_id) {
+        return { error: "target not found or is void" };
+      }
+    } else {
+      const containingNode = getContainingNode(instance);
+      if (containingNode !== agent.current_node_id && !isInAgentInventory(instance, agent.id)) {
+        return { error: "target not found or is void" };
+      }
+    }
+  }
+
   if (!checkPermission(agent, instance, "inspect")) {
     return { error: "permission denied" };
   }
