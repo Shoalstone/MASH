@@ -15,6 +15,7 @@ export function fireInteractions(
   verb: string,
   actor: Agent | null,
   subject: Instance | null,
+  params?: Record<string, any>,
 ): boolean {
   if (instance.is_void || instance.is_destroyed) return false;
   if (!instance.template_id) return false;
@@ -35,6 +36,7 @@ export function fireInteractions(
     actor,
     subject,
     template,
+    params: params ?? {},
     denied: false,
   };
 
@@ -62,6 +64,7 @@ interface InteractionContext {
   actor: Agent | null;
   subject: Instance | null;
   template: Template;
+  params: Record<string, any>;
   denied: boolean;
 }
 
@@ -76,6 +79,7 @@ function resolveRef(ref: string, ctx: InteractionContext): any {
   if (root === "subject") return resolveSubjectRef(parts.slice(1), ctx);
   if (root === "carrier") return resolveCarrierRef(parts.slice(1), ctx);
   if (root === "container") return resolveContainerRef(parts.slice(1), ctx);
+  if (root === "action") return resolveActionRef(parts.slice(1), ctx);
   if (root === "tick") return resolveTickRef(parts.slice(1));
 
   return undefined;
@@ -200,6 +204,12 @@ function resolveContainerRef(parts: string[], ctx: InteractionContext): any {
 
   const fields = JSON.parse(container.fields);
   return fields[field];
+}
+
+function resolveActionRef(parts: string[], ctx: InteractionContext): any {
+  if (parts.length === 0) return undefined;
+  const field = parts[0]!;
+  return ctx.params[field];
 }
 
 function resolveTickRef(parts: string[]): any {

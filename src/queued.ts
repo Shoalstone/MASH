@@ -471,7 +471,7 @@ export function processCustomVerb(agent: ActiveAgent, verb: string, params: any)
     if (!subject || subject.is_void || subject.is_destroyed) return { error: "subject not found or is void" };
   }
 
-  const denied = fireInteractions(target, verb, agent, subject);
+  const denied = fireInteractions(target, verb, agent, subject, params);
   if (denied) return { error: "action denied by interaction" };
 
   return { verb_fired: true, target_id, verb };

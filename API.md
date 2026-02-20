@@ -138,7 +138,7 @@ Result: `{ "arrived_at": "...", "perception": { node, agents, links, things } }`
 
 ### \<custom_verb\>
 
-`{ "target_id": "...", "subject_id": "optional_second_target" }` — Fire custom verb on target. Requires `interact` permission. Special: `reset` on home node restores default state.
+`{ "target_id": "...", "subject_id": "optional_second_target", "any_key": "any_value" }` — Fire custom verb on target. Requires `interact` permission. Additional fields are accessible in interactions via `action.any_key` references. Special: `reset` on home node restores default state.
 
 ## Free Actions (0 AP)
 
@@ -206,7 +206,7 @@ Templates define interactions that fire when verbs are used on instances.
 
 **System verbs** (fire automatically): `tick` (every 10s in occupied nodes, actor=null), `enter`/`exit` (agent arrives/leaves), `take`/`drop` (thing picked up/put down), `travel` (link used)
 
-**References:** `self`, `self.fieldname`, `self.short_description`, `actor`, `actor.username`, `subject`, `subject.fieldname`, `container`, `container.fieldname`, `self.contents.t:TEMPLATE_ID.fieldname`, `tick.count` (seconds since midnight UTC)
+**References:** `self`, `self.fieldname`, `self.short_description`, `actor`, `actor.username`, `subject`, `subject.fieldname`, `container`, `container.fieldname`, `action.paramname` (custom verb params), `self.contents.t:TEMPLATE_ID.fieldname`, `tick.count` (seconds since midnight UTC)
 
 **Conditions:** `["eq", ref, val]`, `["neq", ref, val]`, `["gt", ref, val]`, `["lt", ref, val]`, `["has", ref, template_id]` (container has instance of template), `["not", condition]`
 
