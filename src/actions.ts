@@ -1,17 +1,17 @@
 import { Hono } from "hono";
 import db, { AGENT_COLUMNS } from "./db.ts";
 import type { ActiveAgent } from "./types.ts";
-import { buildResponse, getTickInfo } from "./response.ts";
+import { buildResponse, getTickInfo, broadcastToNode } from "./response.ts";
 import { handleLook, handleSurvey, handleInspect, handleSay, handleList } from "./instant.ts";
 import { enqueueAction } from "./queued.ts";
-import { MAX_AP } from "./config.ts";
+import { MAX_AP, IDLE_TIMEOUT_MS } from "./config.ts";
 import { checkHomeNodeAccess } from "./engine/permissions.ts";
 
 const actions = new Hono<{ Variables: { agent: ActiveAgent } }>();
 
 const INSTANT_ACTIONS = new Set(["look", "survey", "inspect", "say", "list"]);
 const QUEUED_ACTIONS = new Set(["create", "edit", "delete", "travel", "home", "take", "drop"]);
-const FREE_ACTIONS = new Set(["configure"]);
+const FREE_ACTIONS = new Set(["configure", "logout"]);
 
 actions.post("/:verb", async (c) => {
   const agent = c.get("agent");
@@ -27,6 +27,9 @@ actions.post("/:verb", async (c) => {
   // Free actions (0 AP)
   if (verb === "configure") {
     return c.json(buildResponse(agent, handleConfigure(agent, body)));
+  }
+  if (verb === "logout") {
+    return c.json(buildResponse(agent, handleLogout(agent)));
   }
   // Check AP
   const freshAgent = db.query(`SELECT ${AGENT_COLUMNS} FROM agents WHERE id = ?`).get(agent.id) as ActiveAgent;
@@ -96,6 +99,20 @@ actions.post("/:verb", async (c) => {
     ap_remaining: updatedAgent.ap,
   }));
 });
+
+function handleLogout(agent: ActiveAgent): any {
+  // Broadcast departure to current node
+  broadcastToNode(agent.current_node_id, "broadcast", {
+    message: `${agent.username} has logged out.`,
+  }, agent.id);
+
+  // Send to limbo, backdate activity so they appear idle for an hour, clear token
+  db.query(
+    "UPDATE agents SET current_node_id = NULL, last_active_at = ?, token = NULL WHERE id = ?"
+  ).run(Date.now() - IDLE_TIMEOUT_MS, agent.id);
+
+  return { logged_out: true };
+}
 
 function handleConfigure(agent: ActiveAgent, params: any): any {
   const updates: string[] = [];

@@ -34,7 +34,7 @@ Event data by type: `action_result` (queued results), `chat` (`{from, from_id, m
 ## AP (Action Points)
 
 - **4 AP** per tick (reset every 10s); instant and queued actions cost **1 AP**
-- `configure` and `buy_ap` cost **0 AP**
+- `configure`, `logout`, and `buy_ap` cost **0 AP**
 - Buy up to **20 extra AP** per tick via `buy_ap`; 0 AP → HTTP 429
 
 ## Polling
@@ -141,6 +141,10 @@ Result: `{ "arrived_at": "...", "perception": { node, agents, links, things } }`
 `{ "target_id": "...", "subject_id": "optional_second_target" }` — Fire custom verb on target. Requires `interact` permission. Special: `reset` on home node restores default state.
 
 ## Free Actions (0 AP)
+
+### logout
+
+`{}` — Log out and go to sleep. Clears session token, sends agent to limbo, broadcasts departure to current node. Requires re-login to resume.
 
 ### configure
 
