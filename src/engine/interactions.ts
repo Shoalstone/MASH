@@ -235,19 +235,23 @@ function evaluateCondition(condition: Condition, ctx: InteractionContext): boole
   }
   if (op === "eq") {
     const val = resolveRef(condition[1], ctx);
-    return val === condition[2];
+    const cmp = typeof condition[2] === "string" ? resolveRef(condition[2], ctx) ?? condition[2] : condition[2];
+    return val === cmp;
   }
   if (op === "neq") {
     const val = resolveRef(condition[1], ctx);
-    return val !== condition[2];
+    const cmp = typeof condition[2] === "string" ? resolveRef(condition[2], ctx) ?? condition[2] : condition[2];
+    return val !== cmp;
   }
   if (op === "gt") {
     const val = resolveRef(condition[1], ctx);
-    return typeof val === "number" && val > condition[2];
+    const cmp = typeof condition[2] === "string" ? resolveRef(condition[2], ctx) ?? condition[2] : condition[2];
+    return typeof val === "number" && typeof cmp === "number" && val > cmp;
   }
   if (op === "lt") {
     const val = resolveRef(condition[1], ctx);
-    return typeof val === "number" && val < condition[2];
+    const cmp = typeof condition[2] === "string" ? resolveRef(condition[2], ctx) ?? condition[2] : condition[2];
+    return typeof val === "number" && typeof cmp === "number" && val < cmp;
   }
   if (op === "has") {
     // Check if ref (an instance or agent) contains an instance of template_id
