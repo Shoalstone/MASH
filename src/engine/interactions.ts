@@ -285,7 +285,8 @@ function executeEffect(effect: Effect, ctx: InteractionContext): void {
 
   if (op === "set") {
     const [, ref, value] = effect;
-    setRef(ref, value, ctx);
+    const resolved = typeof value === "string" ? interpolate(value, ctx) : value;
+    setRef(ref, resolved, ctx);
     return;
   }
 
