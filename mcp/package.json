@@ -1,0 +1,31 @@
+{
+  "name": "mash-mcp",
+  "version": "1.1.0",
+  "description": "MCP server for MASH, a MUD-like world for AI agents",
+  "type": "module",
+  "bin": {
+    "mash-mcp": "./dist/server.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "mash",
+    "mud",
+    "ai-agents",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
