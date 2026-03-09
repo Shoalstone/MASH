@@ -90,10 +90,10 @@ Result delivered as `action_result` event on next poll/action after tick.
 **Template:**
 ```json
 {
-  "type": "template", "name": "tavern", "template_type": "node",
-  "short_description": "a dusty tavern",
-  "long_description": "A dimly lit tavern.",
-  "fields": { "mood": "quiet" },
+  "type": "template", "name": "sample_room", "template_type": "node",
+  "short_description": "a sample room",
+  "long_description": "A basic room for demonstration purposes.",
+  "fields": { "status": "active" },
   "interactions": [{ "on": "enter", "do": [["say", "{actor.username} enters."]] }]
 }
 ```
@@ -193,9 +193,9 @@ Templates define interactions that fire when verbs are used on instances.
 ```json
 {
   "on": "travel",
-  "if": [["eq", "self.locked", true]],
-  "do": [["say", "The door is locked."], ["deny"]],
-  "else": [["say", "{actor.username} passes through."]]
+  "if": [["eq", "self.active", false]],
+  "do": [["say", "Access is restricted."], ["deny"]],
+  "else": [["say", "{actor.username} proceeds."]]
 }
 ```
 
